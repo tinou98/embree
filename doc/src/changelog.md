@@ -1,6 +1,11 @@
 Version History
 ---------------
 
+### New Features in Embree 3.5.3
+-   Added Catmull-Rom curve types.
+-   Fixed a bug preventing normal oriented curves being used unless timesteps were
+    specified.
+
 ### New Features in Embree 3.5.2
 -   Added EMBREE_API_NAMESPACE cmake option that allows to put all Embree API functions
     inside a user defined namespace.
