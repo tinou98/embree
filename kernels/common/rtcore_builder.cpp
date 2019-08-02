@@ -25,6 +25,15 @@
 #include "../builders/bvh_builder_sah.h"
 #include "../builders/bvh_builder_morton.h"
 
+
+
+
+#include "../bvh/bvh.h"
+#include "../geometry/instance.h"
+#include "../geometry/trianglev.h"
+#include "../geometry/trianglei.h"
+#include "../geometry/curveNi.h"
+
 namespace embree
 { 
   namespace isa // FIXME: support more ISAs for builders
@@ -450,6 +459,229 @@ RTC_NAMESPACE_BEGIN
       RTC_VERIFY_HANDLE(hbvh);
       bvh->refDec();
       RTC_CATCH_END(device);
+    }
+
+    void* createLeaf(const BVH4::NodeRef node,
+                     const LBBox3fa lbounds,
+                     const PrimitiveType *leafType,
+                     const RTCBVHExtractFunction args,
+                     void *userData) {
+        BBox3fa glbBounds = lbounds.bounds();
+        RTCBounds bb;
+        bb.lower_x = glbBounds.lower.x;
+        bb.lower_y = glbBounds.lower.y;
+        bb.lower_z = glbBounds.lower.z;
+
+        bb.upper_x = glbBounds.upper.x;
+        bb.upper_y = glbBounds.upper.y;
+        bb.upper_z = glbBounds.upper.z;
+
+        size_t nb;
+        if(leafType == &Triangle4v::type) {
+            Triangle4v *prims = reinterpret_cast<Triangle4v *>(node.leaf(nb));
+            BVHPrimitive primsArray[4*nb];
+            unsigned int realNum = 0;
+            for(int i = 0; i < nb; ++i) {
+                for(size_t j = 0; j < prims[i].size(); j++) {
+                    primsArray[realNum].geomID = prims[i].geomID(j);
+                    primsArray[realNum].primID = prims[i].primID(j);
+                    ++realNum;
+                }
+            }
+
+            return args.createLeaf(realNum, primsArray, bb, userData);
+        } else if(leafType == &Triangle4i::type) {
+            Triangle4i *prims = reinterpret_cast<Triangle4i *>(node.leaf(nb));
+            BVHPrimitive primsArray[4*nb];
+            unsigned int realNum = 0;
+            for(int i = 0; i < nb; ++i) {
+                for(size_t j = 0; j < prims[i].size(); j++) {
+                    primsArray[realNum].geomID = prims[i].geomID(j);
+                    primsArray[realNum].primID = prims[i].primID(j);
+                    ++realNum;
+                }
+            }
+
+            return args.createLeaf(realNum, primsArray, bb, userData);
+        } else if(leafType == &InstancePrimitive::type) {
+            InstancePrimitive *prims = reinterpret_cast<InstancePrimitive *>(node.leaf(nb));
+            uint geomIDs[nb];
+            for(int i = 0; i < nb; ++i)
+                geomIDs[i] = prims[i].instance->geomID;
+
+            return args.createInstance(nb, geomIDs, bb, userData);
+        } else if(leafType == &Curve8i::type) {
+            Curve8i *prims = reinterpret_cast<Curve8i *>(node.leaf(nb));
+
+            BVHPrimitive primsArray[8*nb];
+            unsigned int realNum = 0;
+
+            std::cout << "[CURVE] Leaf has " << nb << " curves" << std::endl;
+            for(int i = 0; i < nb; ++i) {
+                const Curve8i prim = prims[i];
+                const size_t N = prim.N;
+
+                std::cout << "[CURVE " << i << "] " << N << " childs" << std::endl;
+                std::cout << "\t" << *prim.scale(N) << " " << *prim.offset(N) << std::endl;
+                for(int j = 0; j < N; ++j) {
+                    std::cout << "[CURVE " << i << " " << j << "] Geom " << prim.geomID(N) << "\tPrim " << prim.primID(N)[j] << std::endl;
+                    std::cout << "\t"
+                              << prim.bounds_vx_lower(N)[j] << ", "
+                              << prim.bounds_vy_lower(N)[j] << ", "
+                              << prim.bounds_vz_lower(N)[j] << std::endl;
+                }
+                /*
+                const vfloat4 offset_scale = vfloat4::loadu(prim.offset(N));
+                const Vec3fa offset = Vec3fa(offset_scale);
+                const Vec3fa scale = Vec3fa(shuffle<3,3,3,3>(offset_scale));
+
+                const LinearSpace3<Vec3f> space(Vec3f::load(prim.bounds_vx_x(N)), vfloat<8>::load(prim.bounds_vx_y(N)), vfloat<8>::load(prim.bounds_vx_z(N)),
+                        vfloat<8>::load(prim.bounds_vy_x(N)), vfloat<8>::load(prim.bounds_vy_y(N)), vfloat<8>::load(prim.bounds_vy_z(N)),
+                        vfloat<8>::load(prim.bounds_vz_x(N)), vfloat<8>::load(prim.bounds_vz_y(N)), vfloat<8>::load(prim.bounds_vz_z(N)));
+
+                const Vec3fa org1 = (ray.org-offset)*scale;
+                const Vec3fa dir1 = ray.dir*scale;
+                const Vec3vfM dir2 = xfmVector(space,Vec3vfM(dir1));
+                const Vec3vfM org2 = xfmPoint (space,Vec3vfM(org1));
+                const Vec3vfM rcp_dir2 = rcp_safe(dir2);
+
+                const vfloat<M> t_lower_x = (vfloat<M>::load(prim.bounds_vx_lower(N))-vfloat<M>(org2.x))*vfloat<M>(rcp_dir2.x);
+                const vfloat<M> t_upper_x = (vfloat<M>::load(prim.bounds_vx_upper(N))-vfloat<M>(org2.x))*vfloat<M>(rcp_dir2.x);
+                const vfloat<M> t_lower_y = (vfloat<M>::load(prim.bounds_vy_lower(N))-vfloat<M>(org2.y))*vfloat<M>(rcp_dir2.y);
+                const vfloat<M> t_upper_y = (vfloat<M>::load(prim.bounds_vy_upper(N))-vfloat<M>(org2.y))*vfloat<M>(rcp_dir2.y);
+                const vfloat<M> t_lower_z = (vfloat<M>::load(prim.bounds_vz_lower(N))-vfloat<M>(org2.z))*vfloat<M>(rcp_dir2.z);
+                const vfloat<M> t_upper_z = (vfloat<M>::load(prim.bounds_vz_upper(N))-vfloat<M>(org2.z))*vfloat<M>(rcp_dir2.z);
+
+                const vfloat<M> tNear = max(mini(t_lower_x,t_upper_x),mini(t_lower_y,t_upper_y),mini(t_lower_z,t_upper_z),vfloat<M>(ray.tnear()));
+                const vfloat<M> tFar  = min(maxi(t_lower_x,t_upper_x),maxi(t_lower_y,t_upper_y),maxi(t_lower_z,t_upper_z),vfloat<M>(ray.tfar));
+                tNear_o = tNear;
+                return (vint<M>(step) < vint<M>(prim.N)) & (tNear <= tFar);
+                */
+            }
+
+            return nullptr;
+            // return args.createCurve(realNum, primsArray, bb, userData);
+        } else {
+            std::cout << "Error: unknown prim " << leafType->name() << std::endl;
+            return nullptr;
+        }
+    }
+
+    void* recurse(const BVH4::NodeRef node,
+                  const LBBox3fa lbounds,
+                  const BBox1f timeLimits,
+                  const PrimitiveType *leafType,
+                  const RTCBVHExtractFunction args,
+                  void *userData) {
+      if(node.isLeaf())
+          return createLeaf(node, lbounds, leafType, args, userData);
+
+      const BVH4::AlignedNode *anode = nullptr;
+      const BVH4::AlignedNodeMB *anodeMB = nullptr;
+      const BVH4::AlignedNodeMB4D *anodeMB4D = nullptr;
+
+      if(node.isAlignedNode()) {
+          anode = node.alignedNode();
+      } else if(node.isAlignedNodeMB()) {
+          anodeMB = node.alignedNodeMB();
+      } else if (node.isAlignedNodeMB4D()) {
+          anodeMB4D = node.alignedNodeMB4D();
+          anodeMB = anodeMB4D;
+      } else {
+          std::cout << "[EMBREE - BVH] Node type is unknown -> " << node.type() << std::endl;
+          return nullptr;
+      }
+
+      int nb = 0;
+      void *children[4];
+      for(uint i = 0; i < 4; i++) {
+          BVH4::NodeRef node;
+          LBBox3fa boundBox;
+          BBox1f timeRange = BBox1f(0, 1);
+
+          if(anode != nullptr) {
+              node = anode->child(i);
+              boundBox = LBBox3fa(anode->bounds(i));
+          } else if (anodeMB != nullptr) {
+              node = anodeMB->child(i);
+              boundBox = anodeMB->lbounds(i);
+
+              if (anodeMB4D != nullptr)
+                  timeRange = anodeMB4D->timeRange(i);
+          }
+
+          void *child = recurse(node, boundBox, timeRange, leafType, args, userData);
+          if(child != nullptr)
+              children[nb++] = child;
+      }
+
+      RTCBounds bb;
+      bb.lower_x = lbounds.bounds0.lower.x;
+      bb.lower_y = lbounds.bounds0.lower.y;
+      bb.lower_z = lbounds.bounds0.lower.z;
+
+      bb.upper_x = lbounds.bounds0.upper.x;
+      bb.upper_y = lbounds.bounds0.upper.y;
+      bb.upper_z = lbounds.bounds0.upper.z;
+
+      bb.align0 = timeLimits.lower;
+      bb.align1 = timeLimits.upper;
+
+      RTCBounds deltaBB;
+
+      bool useDelta = lbounds.bounds0 != lbounds.bounds1;
+      if(useDelta) {
+        BBox3fa delta = lbounds.bounds1 - lbounds.bounds0;
+        deltaBB.lower_x = delta.lower.x;
+        deltaBB.lower_y = delta.lower.y;
+        deltaBB.lower_z = delta.lower.z;
+
+        deltaBB.upper_x = delta.upper.x;
+        deltaBB.upper_y = delta.upper.y;
+        deltaBB.upper_z = delta.upper.z;
+      }
+      return args.createAlignedNode(nb, children, bb, useDelta ? &deltaBB : nullptr, userData);
+    }
+
+    RTC_API void *rtcExtractBVH(RTCScene hscene, RTCBVHExtractFunction args, void *userData) {
+      Scene* scene = (Scene*) hscene;
+      RTC_CATCH_BEGIN;
+      RTC_TRACE(rtcSampleTry);
+#if defined(DEBUG)
+      RTC_VERIFY_HANDLE(hscene);
+#endif
+
+      std::vector<void*> nodes;
+
+      for (Accel *a : scene->accels) {
+        std::cout << "Accel " << a->intersectors.intersector1.name << std::endl;
+        AccelData *ad = a->intersectors.ptr;
+        if(ad->type != AccelData::TY_BVH4) {
+          std::cout << "Unable to extract non BVH4 tree" << std::endl;
+          continue;
+        }
+
+        BVH4 *bvh = dynamic_cast<BVH4 *>(ad);
+        std::cout << "Prim type -> " << bvh->primTy->name() << std::endl;
+
+        BVH4::NodeRef root = bvh->root;
+        nodes.push_back(recurse(root, bvh->bounds, BBox1f(0, 1), bvh->primTy, args, userData));
+      }
+      std::cout << "[DONE]" << std::endl;
+
+      if(nodes.size() == 0)
+        return nullptr;
+
+      if(nodes.size() == 1)
+        return nodes[0];
+
+      RTCBounds bounds;
+      rtcGetSceneBounds(hscene, &bounds);
+
+      return args.createAlignedNode(nodes.size(), nodes.data(), bounds, nullptr, userData);
+
+      RTC_CATCH_END2(scene);
+      return nullptr;
     }
 
 RTC_NAMESPACE_END

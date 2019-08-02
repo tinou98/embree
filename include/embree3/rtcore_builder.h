@@ -134,5 +134,19 @@ RTC_API void rtcRetainBVH(RTCBVH bvh);
 /* Releases the BVH (decrements reference count). */
 RTC_API void rtcReleaseBVH(RTCBVH bvh);
 
+struct BVHPrimitive {
+    unsigned int geomID;
+    unsigned int primID;
+};
+
+struct RTCBVHExtractFunction
+{
+  void* (*createLeaf) (unsigned int nbPrim, BVHPrimitive prims[], const RTCBounds &bounds, void *userData);
+  void* (*createInstance) (int nbPrim, unsigned int geomID[], const RTCBounds &bounds, void *userData);
+  void* (*createAlignedNode) (int nbChild, void* children[], const RTCBounds &bounds, const RTCBounds *t1, void *userData);
+};
+
+RTC_API void *rtcExtractBVH(RTCScene hscene, RTCBVHExtractFunction args, void *userData);
+
 RTC_NAMESPACE_END
 
