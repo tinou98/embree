@@ -33,6 +33,7 @@
 #include "../geometry/trianglev.h"
 #include "../geometry/trianglei.h"
 #include "../geometry/curveNi.h"
+#include "../geometry/linei.h"
 
 namespace embree
 { 
@@ -511,56 +512,41 @@ RTC_NAMESPACE_BEGIN
 
             return args.createInstance(nb, geomIDs, bb, userData);
         } else if(leafType == &Curve8i::type) {
-            Curve8i *prims = reinterpret_cast<Curve8i *>(node.leaf(nb));
+            typedef unsigned char Primitive;
 
-            BVHPrimitive primsArray[8*nb];
+            Primitive* prim = (Primitive*)node.leaf(nb);
+            if(nb == 0) return nullptr;
+
+            assert(nb == 1);
+            Geometry::GType ty = (Geometry::GType)(*prim);
+
+            BVHPrimitive primsArray[8];
             unsigned int realNum = 0;
 
-            std::cout << "[CURVE] Leaf has " << nb << " curves" << std::endl;
-            for(int i = 0; i < nb; ++i) {
-                const Curve8i prim = prims[i];
-                const size_t N = prim.N;
-
-                std::cout << "[CURVE " << i << "] " << N << " childs" << std::endl;
-                std::cout << "\t" << *prim.scale(N) << " " << *prim.offset(N) << std::endl;
-                for(int j = 0; j < N; ++j) {
-                    std::cout << "[CURVE " << i << " " << j << "] Geom " << prim.geomID(N) << "\tPrim " << prim.primID(N)[j] << std::endl;
-                    std::cout << "\t"
-                              << prim.bounds_vx_lower(N)[j] << ", "
-                              << prim.bounds_vy_lower(N)[j] << ", "
-                              << prim.bounds_vz_lower(N)[j] << std::endl;
+            switch(ty) {
+            case Geometry::GTY_FLAT_LINEAR_CURVE: {
+                Line8i *line = reinterpret_cast<Line8i*>(prim);
+                for(size_t i = 0; i < line->m; i++) {
+                    primsArray[realNum].geomID = line->geomID();
+                    primsArray[realNum].primID = *((unsigned int*)(prim + i*4 + 0x40));
+                    ++realNum;
                 }
-                /*
-                const vfloat4 offset_scale = vfloat4::loadu(prim.offset(N));
-                const Vec3fa offset = Vec3fa(offset_scale);
-                const Vec3fa scale = Vec3fa(shuffle<3,3,3,3>(offset_scale));
-
-                const LinearSpace3<Vec3f> space(Vec3f::load(prim.bounds_vx_x(N)), vfloat<8>::load(prim.bounds_vx_y(N)), vfloat<8>::load(prim.bounds_vx_z(N)),
-                        vfloat<8>::load(prim.bounds_vy_x(N)), vfloat<8>::load(prim.bounds_vy_y(N)), vfloat<8>::load(prim.bounds_vy_z(N)),
-                        vfloat<8>::load(prim.bounds_vz_x(N)), vfloat<8>::load(prim.bounds_vz_y(N)), vfloat<8>::load(prim.bounds_vz_z(N)));
-
-                const Vec3fa org1 = (ray.org-offset)*scale;
-                const Vec3fa dir1 = ray.dir*scale;
-                const Vec3vfM dir2 = xfmVector(space,Vec3vfM(dir1));
-                const Vec3vfM org2 = xfmPoint (space,Vec3vfM(org1));
-                const Vec3vfM rcp_dir2 = rcp_safe(dir2);
-
-                const vfloat<M> t_lower_x = (vfloat<M>::load(prim.bounds_vx_lower(N))-vfloat<M>(org2.x))*vfloat<M>(rcp_dir2.x);
-                const vfloat<M> t_upper_x = (vfloat<M>::load(prim.bounds_vx_upper(N))-vfloat<M>(org2.x))*vfloat<M>(rcp_dir2.x);
-                const vfloat<M> t_lower_y = (vfloat<M>::load(prim.bounds_vy_lower(N))-vfloat<M>(org2.y))*vfloat<M>(rcp_dir2.y);
-                const vfloat<M> t_upper_y = (vfloat<M>::load(prim.bounds_vy_upper(N))-vfloat<M>(org2.y))*vfloat<M>(rcp_dir2.y);
-                const vfloat<M> t_lower_z = (vfloat<M>::load(prim.bounds_vz_lower(N))-vfloat<M>(org2.z))*vfloat<M>(rcp_dir2.z);
-                const vfloat<M> t_upper_z = (vfloat<M>::load(prim.bounds_vz_upper(N))-vfloat<M>(org2.z))*vfloat<M>(rcp_dir2.z);
-
-                const vfloat<M> tNear = max(mini(t_lower_x,t_upper_x),mini(t_lower_y,t_upper_y),mini(t_lower_z,t_upper_z),vfloat<M>(ray.tnear()));
-                const vfloat<M> tFar  = min(maxi(t_lower_x,t_upper_x),maxi(t_lower_y,t_upper_y),maxi(t_lower_z,t_upper_z),vfloat<M>(ray.tfar));
-                tNear_o = tNear;
-                return (vint<M>(step) < vint<M>(prim.N)) & (tNear <= tFar);
-                */
+            } break;
+            case Geometry::GTY_ROUND_HERMITE_CURVE: {
+                Curve8i *curve = reinterpret_cast<Curve8i*>(prim);
+                const auto N = curve->N;
+                for(size_t i = 0; i < N; i++) {
+                    primsArray[realNum].geomID = curve->geomID(N);
+                    primsArray[realNum].primID = curve->primID(N)[i];
+                    ++realNum;
+                }
+            } break;
+            default:
+                std::cout << "Unexpected geom type, which is " << ty << std::endl;
+                return nullptr;
             }
 
-            return nullptr;
-            // return args.createCurve(realNum, primsArray, bb, userData);
+            return args.createCurve(realNum, primsArray, bb, userData);
         } else {
             std::cout << "Error: unknown prim " << leafType->name() << std::endl;
             return nullptr;
@@ -576,17 +562,26 @@ RTC_NAMESPACE_BEGIN
       if(node.isLeaf())
           return createLeaf(node, lbounds, leafType, args, userData);
 
+      const BVH4::BaseNode *bnode = nullptr;
       const BVH4::AlignedNode *anode = nullptr;
       const BVH4::AlignedNodeMB *anodeMB = nullptr;
       const BVH4::AlignedNodeMB4D *anodeMB4D = nullptr;
 
+      const BVH4::UnalignedNode *unanode = nullptr;
+
       if(node.isAlignedNode()) {
           anode = node.alignedNode();
+          bnode = anode;
       } else if(node.isAlignedNodeMB()) {
           anodeMB = node.alignedNodeMB();
+          bnode = anodeMB;
       } else if (node.isAlignedNodeMB4D()) {
           anodeMB4D = node.alignedNodeMB4D();
           anodeMB = anodeMB4D;
+          bnode = anodeMB;
+      } else if (node.isUnalignedNode()) {
+          unanode = node.unalignedNode();
+          bnode = unanode;
       } else {
           std::cout << "[EMBREE - BVH] Node type is unknown -> " << node.type() << std::endl;
           return nullptr;
@@ -595,22 +590,22 @@ RTC_NAMESPACE_BEGIN
       int nb = 0;
       void *children[4];
       for(uint i = 0; i < 4; i++) {
-          BVH4::NodeRef node;
           LBBox3fa boundBox;
           BBox1f timeRange = BBox1f(0, 1);
 
           if(anode != nullptr) {
-              node = anode->child(i);
               boundBox = LBBox3fa(anode->bounds(i));
           } else if (anodeMB != nullptr) {
-              node = anodeMB->child(i);
               boundBox = anodeMB->lbounds(i);
 
               if (anodeMB4D != nullptr)
                   timeRange = anodeMB4D->timeRange(i);
+          } else if(unanode != nullptr) {
+              boundBox = lbounds;
+#warning Should use unaligned bounds
           }
 
-          void *child = recurse(node, boundBox, timeRange, leafType, args, userData);
+          void *child = recurse(bnode->child(i), boundBox, timeRange, leafType, args, userData);
           if(child != nullptr)
               children[nb++] = child;
       }
