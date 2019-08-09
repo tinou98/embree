@@ -143,6 +143,7 @@ struct RTCBVHExtractFunction
 {
   void* (*createLeaf) (unsigned int nbPrim, BVHPrimitive prims[], const RTCBounds &bounds, void *userData);
   void* (*createInstance) (int nbPrim, unsigned int geomID[], const RTCBounds &bounds, void *userData);
+  void* (*createCurve) (unsigned int nbPrim, BVHPrimitive prims[], const RTCBounds &bounds, void *userData);
   void* (*createAlignedNode) (int nbChild, void* children[], const RTCBounds &bounds, const RTCBounds *t1, void *userData);
 };
 
