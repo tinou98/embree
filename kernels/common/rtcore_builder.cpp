@@ -357,6 +357,8 @@ namespace embree
       return root;
     }
   }
+
+  DECLARE_ISA_FUNCTION(unsigned int, getLine8iPrimId, Line8i* COMMA unsigned int);
 }
 
 using namespace embree;
@@ -525,10 +527,15 @@ RTC_NAMESPACE_BEGIN
 
             switch(ty) {
             case Geometry::GTY_FLAT_LINEAR_CURVE: {
+                // Access to PrimID from right ISA, otherwise lead to allignement issue
+                DEFINE_ISA_FUNCTION(unsigned int, getLine8iPrimId, Line8i* COMMA unsigned int)
+                SELECT_SYMBOL_INIT_AVX(getCPUFeatures(), getLine8iPrimId)
+
                 Line8i *line = reinterpret_cast<Line8i*>(prim);
+
                 for(size_t i = 0; i < line->m; i++) {
                     primsArray[realNum].geomID = line->geomID();
-                    primsArray[realNum].primID = *((unsigned int*)(prim + i*4 + 0x40));
+                    primsArray[realNum].primID = getLine8iPrimId(line, i);
                     ++realNum;
                 }
             } break;
