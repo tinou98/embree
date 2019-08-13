@@ -464,21 +464,11 @@ RTC_NAMESPACE_BEGIN
       RTC_CATCH_END(device);
     }
 
+
     void* createLeaf(const BVH4::NodeRef node,
-                     const LBBox3fa lbounds,
                      const PrimitiveType *leafType,
                      const RTCBVHExtractFunction args,
                      void *userData) {
-        BBox3fa glbBounds = lbounds.bounds();
-        RTCBounds bb;
-        bb.lower_x = glbBounds.lower.x;
-        bb.lower_y = glbBounds.lower.y;
-        bb.lower_z = glbBounds.lower.z;
-
-        bb.upper_x = glbBounds.upper.x;
-        bb.upper_y = glbBounds.upper.y;
-        bb.upper_z = glbBounds.upper.z;
-
         size_t nb;
         if(leafType == &Triangle4v::type) {
             Triangle4v *prims = reinterpret_cast<Triangle4v *>(node.leaf(nb));
@@ -492,7 +482,7 @@ RTC_NAMESPACE_BEGIN
                 }
             }
 
-            return args.createLeaf(realNum, primsArray, bb, userData);
+            return args.createLeaf(realNum, primsArray, userData);
         } else if(leafType == &Triangle4i::type) {
             Triangle4i *prims = reinterpret_cast<Triangle4i *>(node.leaf(nb));
             BVHPrimitive primsArray[4*nb];
@@ -505,14 +495,14 @@ RTC_NAMESPACE_BEGIN
                 }
             }
 
-            return args.createLeaf(realNum, primsArray, bb, userData);
+            return args.createLeaf(realNum, primsArray, userData);
         } else if(leafType == &InstancePrimitive::type) {
             InstancePrimitive *prims = reinterpret_cast<InstancePrimitive *>(node.leaf(nb));
             uint geomIDs[nb];
             for(int i = 0; i < nb; ++i)
                 geomIDs[i] = prims[i].instance->geomID;
 
-            return args.createInstance(nb, geomIDs, bb, userData);
+            return args.createInstance(nb, geomIDs, userData);
         } else if(leafType == &Curve8i::type) {
             typedef unsigned char Primitive;
 
@@ -553,21 +543,35 @@ RTC_NAMESPACE_BEGIN
                 return nullptr;
             }
 
-            return args.createCurve(realNum, primsArray, bb, userData);
+            return args.createCurve(realNum, primsArray, userData);
         } else {
             std::cout << "Error: unknown prim " << leafType->name() << std::endl;
             return nullptr;
         }
     }
 
+    inline RTCBounds boundsToRTC(const BBox3fa &bounds) {
+        RTCBounds bb;
+        bb.lower_x = bounds.lower.x;
+        bb.lower_y = bounds.lower.y;
+        bb.lower_z = bounds.lower.z;
+
+        bb.upper_x = bounds.upper.x;
+        bb.upper_y = bounds.upper.y;
+        bb.upper_z = bounds.upper.z;
+
+        bb.align0 = 0;
+        bb.align1 = 1;
+
+        return bb;
+    }
+
     void* recurse(const BVH4::NodeRef node,
-                  const LBBox3fa lbounds,
-                  const BBox1f timeLimits,
                   const PrimitiveType *leafType,
                   const RTCBVHExtractFunction args,
                   void *userData) {
       if(node.isLeaf())
-          return createLeaf(node, lbounds, leafType, args, userData);
+          return createLeaf(node, leafType, args, userData);
 
       const BVH4::BaseNode *bnode = nullptr;
       const BVH4::AlignedNode *anode = nullptr;
@@ -594,55 +598,48 @@ RTC_NAMESPACE_BEGIN
           return nullptr;
       }
 
-      int nb = 0;
+      unsigned int nb = 0;
       void *children[4];
       for(uint i = 0; i < 4; i++) {
-          LBBox3fa boundBox;
-          BBox1f timeRange = BBox1f(0, 1);
+          void *child = recurse(bnode->child(i), leafType, args, userData);
+          if(child == nullptr) continue;
 
           if(anode != nullptr) {
-              boundBox = LBBox3fa(anode->bounds(i));
+              args.setAlignedBounds(child, boundsToRTC(anode->bounds(i)), userData);
           } else if (anodeMB != nullptr) {
-              boundBox = anodeMB->lbounds(i);
+              RTCLinearBounds lb;
+              lb.bounds0 = boundsToRTC(anodeMB->bounds0(i));
+              lb.bounds1 = boundsToRTC(anodeMB->bounds1(i) - anodeMB->bounds0(i));
 
-              if (anodeMB4D != nullptr)
-                  timeRange = anodeMB4D->timeRange(i);
+              if (anodeMB4D != nullptr) {
+                  lb.bounds0.align0 = anodeMB4D->timeRange(i).lower;
+                  lb.bounds0.align1 = anodeMB4D->timeRange(i).upper;
+              }
+
+              args.setLinearBounds(child, lb, userData);
           } else if(unanode != nullptr) {
-              boundBox = lbounds;
-#warning Should use unaligned bounds
+              RTCAffineSpace affSpace;
+              affSpace.affine[0] = unanode->naabb.p.x[i];
+              affSpace.affine[1] = unanode->naabb.p.y[i];
+              affSpace.affine[2] = unanode->naabb.p.z[i];
+
+              affSpace.linear[0] = unanode->naabb.l.vx.x[i];
+              affSpace.linear[1] = unanode->naabb.l.vx.y[i];
+              affSpace.linear[2] = unanode->naabb.l.vx.z[i];
+              affSpace.linear[3] = unanode->naabb.l.vy.x[i];
+              affSpace.linear[4] = unanode->naabb.l.vy.y[i];
+              affSpace.linear[5] = unanode->naabb.l.vy.z[i];
+              affSpace.linear[6] = unanode->naabb.l.vz.x[i];
+              affSpace.linear[7] = unanode->naabb.l.vz.y[i];
+              affSpace.linear[8] = unanode->naabb.l.vz.z[i];
+
+              args.setUnalignedBounds(child, affSpace, userData);
           }
 
-          void *child = recurse(bnode->child(i), boundBox, timeRange, leafType, args, userData);
-          if(child != nullptr)
-              children[nb++] = child;
+          children[nb++] = child;
       }
 
-      RTCBounds bb;
-      bb.lower_x = lbounds.bounds0.lower.x;
-      bb.lower_y = lbounds.bounds0.lower.y;
-      bb.lower_z = lbounds.bounds0.lower.z;
-
-      bb.upper_x = lbounds.bounds0.upper.x;
-      bb.upper_y = lbounds.bounds0.upper.y;
-      bb.upper_z = lbounds.bounds0.upper.z;
-
-      bb.align0 = timeLimits.lower;
-      bb.align1 = timeLimits.upper;
-
-      RTCBounds deltaBB;
-
-      bool useDelta = lbounds.bounds0 != lbounds.bounds1;
-      if(useDelta) {
-        BBox3fa delta = lbounds.bounds1 - lbounds.bounds0;
-        deltaBB.lower_x = delta.lower.x;
-        deltaBB.lower_y = delta.lower.y;
-        deltaBB.lower_z = delta.lower.z;
-
-        deltaBB.upper_x = delta.upper.x;
-        deltaBB.upper_y = delta.upper.y;
-        deltaBB.upper_z = delta.upper.z;
-      }
-      return args.createAlignedNode(nb, children, bb, useDelta ? &deltaBB : nullptr, userData);
+      return args.createInnerNode(nb, children, userData);
     }
 
     RTC_API void *rtcExtractBVH(RTCScene hscene, RTCBVHExtractFunction args, void *userData) {
@@ -667,7 +664,9 @@ RTC_NAMESPACE_BEGIN
         std::cout << "Prim type -> " << bvh->primTy->name() << std::endl;
 
         BVH4::NodeRef root = bvh->root;
-        nodes.push_back(recurse(root, bvh->bounds, BBox1f(0, 1), bvh->primTy, args, userData));
+        void *node = recurse(root, bvh->primTy, args, userData);
+        args.setAlignedBounds(node, boundsToRTC(bvh->bounds.bounds()), userData); // TODO USe aligne bounds
+        nodes.push_back(node);
       }
       std::cout << "[DONE]" << std::endl;
 
@@ -680,7 +679,9 @@ RTC_NAMESPACE_BEGIN
       RTCBounds bounds;
       rtcGetSceneBounds(hscene, &bounds);
 
-      return args.createAlignedNode(nodes.size(), nodes.data(), bounds, nullptr, userData);
+      void *root = args.createInnerNode(nodes.size(), nodes.data(), userData);
+      args.setAlignedBounds(root, bounds, userData);
+      return root;
 
       RTC_CATCH_END2(scene);
       return nullptr;

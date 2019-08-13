@@ -180,6 +180,13 @@ struct RTC_ALIGN(16) RTCLinearBounds
   struct RTCBounds bounds1;
 };
 
+/* AffineSpace representation */
+struct RTC_ALIGN(16) RTCAffineSpace
+{
+  float linear[3*3];
+  float affine[3];
+};
+
 /* Intersection context flags */
 enum RTCIntersectContextFlags
 {
