@@ -141,10 +141,17 @@ struct BVHPrimitive {
 
 struct RTCBVHExtractFunction
 {
-  void* (*createLeaf) (unsigned int nbPrim, BVHPrimitive prims[], const RTCBounds &bounds, void *userData);
-  void* (*createInstance) (int nbPrim, unsigned int geomID[], const RTCBounds &bounds, void *userData);
-  void* (*createCurve) (unsigned int nbPrim, BVHPrimitive prims[], const RTCBounds &bounds, void *userData);
-  void* (*createAlignedNode) (int nbChild, void* children[], const RTCBounds &bounds, const RTCBounds *t1, void *userData);
+  // Leaf creator function
+  void* (*createLeaf) (unsigned int nbPrim, const BVHPrimitive prims[], void *userData);
+  void* (*createInstance) (unsigned int nbPrim, const unsigned int geomID[], void *userData);
+  void* (*createCurve) (unsigned int nbPrim, const BVHPrimitive prims[], void *userData);
+
+  // InnerNode creator function
+  void* (*createInnerNode) (unsigned int nbChild, void* children[], void *userData);
+
+  void (*setAlignedBounds) (void *node, const RTCBounds &bounds, void *userData);
+  void (*setLinearBounds) (void *node, const RTCLinearBounds &lbounds, void *userData);
+  void (*setUnalignedBounds) (void *node, const RTCAffineSpace &affSpace, void *userData);
 };
 
 RTC_API void *rtcExtractBVH(RTCScene hscene, RTCBVHExtractFunction args, void *userData);
