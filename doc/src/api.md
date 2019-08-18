@@ -955,6 +955,11 @@ Embree API Reference
 ```
 \pagebreak
 
+## rtcExtractBVH
+``` {include=src/api/rtcExtractBVH.md}
+```
+\pagebreak
+
 Performance Recommendations
 ===========================
 

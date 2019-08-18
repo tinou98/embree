@@ -131,6 +131,35 @@ RTC_API void rtcRetainBVH(RTCBVH bvh);
 /* Releases the BVH (decrements reference count). */
 RTC_API void rtcReleaseBVH(RTCBVH bvh);
 
+struct BVHPrimitive {
+    unsigned int geomID;
+    unsigned int primID;
+};
+
+struct RTCBVHExtractFunction
+{
+  /**
+   * Allow to preallocate buffer, is called before everything else
+   * Can be NULL if not used
+   */
+  void (*expectedSize) (unsigned int num_leaf, unsigned int num_tri, void *userData);
+
+  // Leaf creator function
+  void* (*createLeaf) (unsigned int nbPrim, const BVHPrimitive prims[], void *userData);
+  void* (*createInstance) (unsigned int nbPrim, const unsigned int geomID[], void *userData);
+  void* (*createCurve) (unsigned int nbPrim, const BVHPrimitive prims[], void *userData);
+
+  // InnerNode creator function
+  void* (*createInnerNode) (unsigned int nbChild, void* children[], void *userData);
+
+  void (*setAlignedBounds) (void *node, const RTCBounds &bounds, void *userData);
+  void (*setLinearBounds) (void *node, const RTCLinearBounds &lbounds, void *userData);
+  void (*setUnalignedBounds) (void *node, const RTCAffineSpace &affSpace, void *userData);
+  void (*setUnalignedLinearBounds) (void *node, const RTCAffineSpace &affSpace, const RTCBounds &bounds, void *userData);
+};
+
+RTC_API void *rtcExtractBVH(RTCScene hscene, RTCBVHExtractFunction args, void *userData);
+
 #if defined(__cplusplus)
 }
 #endif

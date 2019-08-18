@@ -135,8 +135,9 @@ namespace embree
 #if defined(__AVX__)
     Builder* BVH8Curve8vBuilder_OBB_New   (void* bvh, Scene* scene, size_t mode) { return new BVHNHairBuilderSAH<8,Curve8v,Line8i>((BVH8*)bvh,scene); }
     Builder* BVH4Curve8iBuilder_OBB_New   (void* bvh, Scene* scene, size_t mode) { return new BVHNHairBuilderSAH<4,Curve8i,Line8i>((BVH4*)bvh,scene); }
-#endif
 
+    unsigned int getLine8iPrimId(Line8i *line, unsigned int i) { return line->primID(i); }
+#endif
   }
 }
 #endif
