@@ -650,6 +650,55 @@ RTC_NAMESPACE_BEGIN
       RTC_VERIFY_HANDLE(hscene);
 #endif
 
+      if (args.expectedSize != nullptr) {
+        /* Defines size and helper macro */
+        struct Size {
+          unsigned int num_prim = 0;
+          unsigned int num_tri = 0;
+        };
+
+#define SIZE(ops)                                 \
+  Size* size = reinterpret_cast<Size*>(userData); \
+  ops                                             \
+  return nullptr;
+
+#define INC(var, val) size->var += (val);
+
+
+        Size size;
+        RTCBVHExtractFunction param;
+
+        param.createLeaf = [](unsigned int nbPrim, const BVHPrimitive[], void* userData) -> void* {
+          SIZE(INC(num_prim, nbPrim) INC(num_tri, 3 * nbPrim))
+        };
+        param.createInstance = [](unsigned int nbPrim, const unsigned int[], void* userData) -> void* {
+          SIZE(INC(num_prim, nbPrim))
+        };
+        param.createCurve = [](unsigned int nbPrim, const BVHPrimitive[], void* userData) -> void* {
+          SIZE(INC(num_prim, nbPrim))
+        };
+        param.createInnerNode = [](unsigned int, void*[], void* ) -> void* { return nullptr; };
+        param.setAlignedBounds = [](void*, const RTCBounds &, void*) {};
+        param.setLinearBounds = [](void*, const RTCLinearBounds &, void*) {};
+        param.setUnalignedBounds = [](void*, const RTCAffineSpace &, void*) {};
+        param.expectedSize = nullptr;
+
+        for (Accel *a : scene->accels) {
+          AccelData *ad = a->intersectors.ptr;
+          if(ad->type != AccelData::TY_BVH4) {
+            throw_RTCError(RTC_ERROR_INVALID_OPERATION, "Unable to extract non BVH4 tree");
+            continue;
+          }
+
+          BVH4 *bvh = dynamic_cast<BVH4 *>(ad);
+          BVH4::NodeRef root = bvh->root;
+
+          recurse(root, bvh->primTy, param, &size);
+        }
+
+        args.expectedSize(size.num_prim, size.num_tri, userData);
+      }
+
       std::vector<void*> nodes;
 
       for (Accel *a : scene->accels) {
