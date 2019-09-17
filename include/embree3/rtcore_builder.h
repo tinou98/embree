@@ -141,6 +141,12 @@ struct BVHPrimitive {
 
 struct RTCBVHExtractFunction
 {
+  /**
+   * Allow to preallocate buffer, is called before everything else
+   * Can be NULL if not used
+   */
+  void (*expectedSize) (unsigned int num_leaf, unsigned int num_tri, void *userData);
+
   // Leaf creator function
   void* (*createLeaf) (unsigned int nbPrim, const BVHPrimitive prims[], void *userData);
   void* (*createInstance) (unsigned int nbPrim, const unsigned int geomID[], void *userData);
