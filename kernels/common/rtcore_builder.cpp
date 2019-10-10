@@ -33,10 +33,11 @@
 #include "../geometry/trianglev.h"
 #include "../geometry/trianglei.h"
 #include "../geometry/curveNi.h"
+#include "../geometry/curveNi_mb.h"
 #include "../geometry/linei.h"
 
 namespace embree
-{ 
+{
   namespace isa // FIXME: support more ISAs for builders
   {
     struct BVH : public RefCount
@@ -671,6 +672,9 @@ RTC_NAMESPACE_BEGIN
       } else if (node.isUnalignedNode()) {
           unanode = node.unalignedNode();
           bnode = unanode;
+      } else if (node.isUnalignedNodeMB()) {
+          unanodeMB = node.unalignedNodeMB();
+          bnode = unanodeMB;
       } else {
           throw_RTCError(RTC_ERROR_INVALID_OPERATION, "Unknown node type");
       }
@@ -694,10 +698,11 @@ RTC_NAMESPACE_BEGIN
               }
 
               args.setLinearBounds(child, lb, userData);
+          } else if(unanode != nullptr) {
               RTCAffineSpace affSpace = affineSpaceToRTC<N>(unanode->naabb, i);
               args.setUnalignedBounds(child, affSpace, userData);
           } else if(unanodeMB != nullptr) {
-              RTCAffineSpace affSpace = affineSpaceToRTC<4>(unanodeMB->space0, i);
+              RTCAffineSpace affSpace = affineSpaceToRTC<N>(unanodeMB->space0, i);
 
               RTCBounds bounds;
               bounds.lower_x = unanodeMB->b1.lower.x[i];

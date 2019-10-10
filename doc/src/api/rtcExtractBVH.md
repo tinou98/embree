@@ -73,7 +73,7 @@ represent an aligned bound box.
 
 The `setLinearBounds` callback function take bounds of type `RTCLinearBounds`
 which represent an aligned bound box that can be linearly interpolated over
-time.
+time. The `align0` and `align1` member are used to time range of the node
 
 The `setUnalignedBounds` callback function take bounds of type `RTCAffineSpace`
 which represent an affine space in which the bound are ((0, 0, 0), (1, 1, 1)).
