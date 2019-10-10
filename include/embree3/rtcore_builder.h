@@ -158,6 +158,7 @@ struct RTCBVHExtractFunction
   void (*setAlignedBounds) (void *node, const RTCBounds &bounds, void *userData);
   void (*setLinearBounds) (void *node, const RTCLinearBounds &lbounds, void *userData);
   void (*setUnalignedBounds) (void *node, const RTCAffineSpace &affSpace, void *userData);
+  void (*setUnalignedLinearBounds) (void *node, const RTCAffineSpace &affSpace, const RTCBounds &bounds, void *userData);
 };
 
 RTC_API void *rtcExtractBVH(RTCScene hscene, RTCBVHExtractFunction args, void *userData);
