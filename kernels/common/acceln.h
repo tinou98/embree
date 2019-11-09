@@ -56,6 +56,8 @@ namespace embree
     void accels_deleteGeometry(size_t geomID);
     void accels_clear ();
 
+    void* extractBVHTree(RTCBVHExtractFunction, void *userData);
+
   public:
     std::vector<Accel*> accels;
   };

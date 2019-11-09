@@ -42,6 +42,9 @@ namespace embree
     /*! clears the acceleration structure data */
     virtual void clear() = 0;
 
+    /*! extract the whole BVH tree */
+    virtual void* extractBVHTree(RTCBVHExtractFunction, void *userData) = 0;
+
     /*! returns normal bounds */
     __forceinline BBox3fa getBounds() const {
       return bounds.bounds();

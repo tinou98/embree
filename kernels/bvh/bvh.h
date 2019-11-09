@@ -24,8 +24,17 @@
 #include "../geometry/primitive.h"
 #include "../common/ray.h"
 
+#include "../geometry/instance.h"
+#include "../geometry/trianglev.h"
+#include "../geometry/trianglei.h"
+#include "../geometry/curveNi.h"
+#include "../geometry/curveNi_mb.h"
+#include "../geometry/linei.h"
+
 namespace embree
 {
+  DECLARE_ISA_FUNCTION(unsigned int, getLine8iPrimId, Line8i* COMMA unsigned int);
+
   /*! flags used to enable specific node types in intersectors */
   enum BVHNodeFlags
   {
@@ -368,6 +377,170 @@ namespace embree
       /*! returns the wideness */
       __forceinline size_t getN() const { return N; }
 
+      void *createLeafBVH(const PrimitiveType *leafType, RTCBVHExtractFunction args, void *userData) const {
+        size_t nb;
+        if(leafType == &Triangle4v::type) {
+            Triangle4v *prims = reinterpret_cast<Triangle4v *>(leaf(nb));
+            BVHPrimitive *primsArray = (BVHPrimitive *)alloca(4 * nb * sizeof(BVHPrimitive));
+            unsigned int realNum = 0;
+            for(int i = 0; i < nb; ++i) {
+                for(size_t j = 0; j < prims[i].size(); j++) {
+                    primsArray[realNum].geomID = prims[i].geomID(j);
+                    primsArray[realNum].primID = prims[i].primID(j);
+                    ++realNum;
+                }
+            }
+
+            return args.createLeaf(realNum, primsArray, userData);
+        } else if(leafType == &Triangle4i::type) {
+            Triangle4i *prims = reinterpret_cast<Triangle4i *>(leaf(nb));
+            BVHPrimitive *primsArray = (BVHPrimitive *)alloca(4 * nb * sizeof(BVHPrimitive));
+            unsigned int realNum = 0;
+            for(int i = 0; i < nb; ++i) {
+                for(size_t j = 0; j < prims[i].size(); j++) {
+                    primsArray[realNum].geomID = prims[i].geomID(j);
+                    primsArray[realNum].primID = prims[i].primID(j);
+                    ++realNum;
+                }
+            }
+
+            return args.createLeaf(realNum, primsArray, userData);
+        } else if(leafType == &InstancePrimitive::type) {
+            InstancePrimitive *prims = reinterpret_cast<InstancePrimitive *>(leaf(nb));
+            unsigned int *geomIDs = (unsigned int *)alloca(sizeof(unsigned int)*nb);
+            for(int i = 0; i < nb; ++i)
+                geomIDs[i] = prims[i].instance->geomID;
+
+            return args.createInstance(nb, geomIDs, userData);
+        } else if(leafType == &Curve8i::type) {
+            typedef unsigned char Primitive;
+
+            Primitive* prim = (Primitive*)leaf(nb);
+            if(nb == 0) return nullptr;
+
+            assert(nb == 1);
+            Geometry::GType ty = (Geometry::GType)(*prim);
+
+            BVHPrimitive primsArray[8];
+            unsigned int realNum = 0;
+
+            switch(ty) {
+            case Geometry::GTY_FLAT_LINEAR_CURVE: {
+              // Access to PrimID from right ISA, otherwise lead to allignement issue
+              DEFINE_ISA_FUNCTION(unsigned int, getLine8iPrimId, Line8i* COMMA unsigned int)
+              SELECT_SYMBOL_INIT_AVX(getCPUFeatures(), getLine8iPrimId)
+
+              Line8i *line = reinterpret_cast<Line8i*>(prim);
+
+              for(size_t i = 0; i < line->m; i++) {
+                primsArray[realNum].geomID = line->geomID();
+                primsArray[realNum].primID = getLine8iPrimId(line, i);
+                ++realNum;
+              }
+            } break;
+            case Geometry::GTY_FLAT_BEZIER_CURVE:
+            case Geometry::GTY_ROUND_BEZIER_CURVE:
+            case Geometry::GTY_ORIENTED_BEZIER_CURVE:
+            case Geometry::GTY_FLAT_BSPLINE_CURVE:
+            case Geometry::GTY_ROUND_BSPLINE_CURVE:
+            case Geometry::GTY_ORIENTED_BSPLINE_CURVE:
+            case Geometry::GTY_FLAT_HERMITE_CURVE:
+            case Geometry::GTY_ROUND_HERMITE_CURVE:
+            case Geometry::GTY_ORIENTED_HERMITE_CURVE: {
+                Curve8i *curve = reinterpret_cast<Curve8i*>(prim);
+                const auto Nb = curve->N;
+                for(size_t i = 0; i < Nb; i++) {
+                    primsArray[realNum].geomID = curve->geomID(Nb);
+                    primsArray[realNum].primID = curve->primID(Nb)[i];
+                    ++realNum;
+                }
+            } break;
+            default:
+                throw_RTCError(RTC_ERROR_INVALID_OPERATION, "Unexpected curve geom type");
+            }
+
+            return args.createCurve(realNum, primsArray, userData);
+        } else if(leafType == &Curve8iMB::type) {
+            typedef unsigned char Primitive;
+
+            Primitive* prim = (Primitive*)leaf(nb);
+            if(nb == 0) return nullptr;
+
+            assert(nb == 1);
+            Geometry::GType ty = (Geometry::GType)(*prim);
+
+            BVHPrimitive primsArray[8];
+            unsigned int realNum = 0;
+
+            switch(ty) {
+            case Geometry::GTY_FLAT_LINEAR_CURVE: {
+                // Access to PrimID from right ISA, otherwise lead to allignement issue
+                DEFINE_ISA_FUNCTION(unsigned int, getLine8iPrimId, Line8i* COMMA unsigned int)
+                SELECT_SYMBOL_INIT_AVX(getCPUFeatures(), getLine8iPrimId)
+
+                Line8i *line = reinterpret_cast<Line8i*>(prim);
+
+                for(size_t i = 0; i < line->m; i++) {
+                    primsArray[realNum].geomID = line->geomID();
+                    primsArray[realNum].primID = getLine8iPrimId(line, i);
+                    ++realNum;
+                }
+            } break;
+            case Geometry::GTY_FLAT_BEZIER_CURVE:
+            case Geometry::GTY_ROUND_BEZIER_CURVE:
+            case Geometry::GTY_ORIENTED_BEZIER_CURVE:
+            case Geometry::GTY_FLAT_BSPLINE_CURVE:
+            case Geometry::GTY_ROUND_BSPLINE_CURVE:
+            case Geometry::GTY_ORIENTED_BSPLINE_CURVE:
+            case Geometry::GTY_FLAT_HERMITE_CURVE:
+            case Geometry::GTY_ROUND_HERMITE_CURVE:
+            case Geometry::GTY_ORIENTED_HERMITE_CURVE: {
+                Curve8iMB *curve = reinterpret_cast<Curve8iMB*>(prim);
+                const auto Nb = curve->N;
+                for(size_t i = 0; i < Nb; i++) {
+                    primsArray[realNum].geomID = curve->geomID(Nb);
+                    primsArray[realNum].primID = curve->primID(Nb)[i];
+                    ++realNum;
+                }
+            } break;
+            default:
+                throw_RTCError(RTC_ERROR_INVALID_OPERATION, "Unexpected curve geom type");
+            }
+
+            return args.createCurve(realNum, primsArray, userData);
+        } else {
+            throw_RTCError(RTC_ERROR_INVALID_OPERATION, "Unsupported primitive");
+        }
+      }
+
+      void* extractBVHTree(const PrimitiveType *leafType, RTCBVHExtractFunction args, void *userData) const {
+        if(isLeaf())
+          return this->createLeafBVH(leafType, args, userData);
+
+        unsigned int nb = 0;
+        void *children[N];
+        for(unsigned int i = 0; i < N; i++) {
+          void *child = nullptr;
+          // Dirty fix to manually dispatch
+          if (isAlignedNode()) {
+            child = alignedNode()->extractBVHChild(i, leafType, args, userData);
+          } else if (isAlignedNodeMB()) {
+            child = alignedNodeMB()->extractBVHChild(i, leafType, args, userData);
+          } else if (isAlignedNodeMB4D()) {
+            child = alignedNodeMB4D()->extractBVHChild(i, leafType, args, userData);
+          } else if (isUnalignedNode()) {
+            child = unalignedNode()->extractBVHChild(i, leafType, args, userData);
+          } else if (isUnalignedNodeMB()) {
+            child = unalignedNodeMB()->extractBVHChild(i, leafType, args, userData);
+          }
+          if(child == nullptr) continue;
+
+          children[nb++] = child;
+        }
+
+        return args.createInnerNode(nb, children, userData);
+      }
+
     private:
       size_t ptr;
     };
@@ -404,6 +577,9 @@ namespace embree
       }
 
       NodeRef children[N];    //!< Pointer to the N children (can be a node or leaf)
+
+      // TODO: Should be declared as virtual, but cause a crash
+      // virtual void* extractBVHChild(size_t i, const PrimitiveType *leafType, RTCBVHExtractFunction args, void *userData) const = 0;
     };
 
     /*! BVHN AlignedNode */
@@ -543,6 +719,15 @@ namespace embree
       /*! Returns reference to specified child */
       __forceinline       NodeRef& child(size_t i)       { assert(i<N); return children[i]; }
       __forceinline const NodeRef& child(size_t i) const { assert(i<N); return children[i]; }
+
+      void* extractBVHChild(size_t i, const PrimitiveType *leafType, RTCBVHExtractFunction args, void *userData) const {
+        assert(i<N);
+        void *child = this->child(i).extractBVHTree(leafType, args, userData);
+        if(child == nullptr) return nullptr;
+
+        args.setAlignedBounds(child, BBox3faToRTC(bounds(i)), userData);
+        return child;
+      }
 
       /*! output operator */
       friend std::ostream& operator<<(std::ostream& o, const AlignedNode& n)
@@ -772,6 +957,23 @@ namespace embree
       __forceinline       NodeRef& child(size_t i)       { assert(i<N); return children[i]; }
       __forceinline const NodeRef& child(size_t i) const { assert(i<N); return children[i]; }
 
+      void* extractBVHChild(size_t i, const PrimitiveType *leafType, RTCBVHExtractFunction args, void *userData) const {
+        assert(i<N);
+
+        void *child = this->child(i).extractBVHTree(leafType, args, userData);
+        if(child == nullptr) return nullptr;
+
+        RTCLinearBounds lb;
+        lb.bounds0 = BBox3faToRTC(bounds0(i));
+        lb.bounds1 = BBox3faToRTC(bounds1(i) - bounds0(i));
+
+        lb.bounds0.align0 = 0;
+        lb.bounds0.align1 = 1;
+
+        args.setLinearBounds(child, lb, userData);
+        return child;
+      }
+
       /*! stream output operator */
       friend std::ostream& operator<<(std::ostream& cout, const AlignedNodeMB& n) 
       {
@@ -917,6 +1119,22 @@ namespace embree
         return BBox1f(lower_t[i],upper_t[i]);
       }
 
+      void* extractBVHChild(size_t i, const PrimitiveType *leafType, RTCBVHExtractFunction args, void *userData) const {
+        assert(i<N);
+        void *child = this->child(i).extractBVHTree(leafType, args, userData);
+        if(child == nullptr) return nullptr;
+
+        RTCLinearBounds lb;
+        lb.bounds0 = BBox3faToRTC(this->bounds0(i));
+        lb.bounds1 = BBox3faToRTC(this->bounds1(i) - this->bounds0(i));
+
+        lb.bounds0.align0 = timeRange(i).lower;
+        lb.bounds0.align1 = timeRange(i).upper;
+
+        args.setLinearBounds(child, lb, userData);
+        return child;
+      }
+
       /*! stream output operator */
       friend std::ostream& operator<<(std::ostream& cout, const AlignedNodeMB4D& n) 
       {
@@ -1017,6 +1235,16 @@ namespace embree
       __forceinline       NodeRef& child(size_t i)       { assert(i<N); return children[i]; }
       __forceinline const NodeRef& child(size_t i) const { assert(i<N); return children[i]; }
 
+      void* extractBVHChild(size_t i, const PrimitiveType *leafType, RTCBVHExtractFunction args, void *userData) const {
+        assert(i<N);
+        void *child = this->child(i).extractBVHTree(leafType, args, userData);
+        if(child == nullptr) return nullptr;
+
+        RTCAffineSpace affSpace = affineSpace3vfToRTC<N>(naabb, i);
+        args.setUnalignedBounds(child, affSpace, userData);
+        return child;
+      }
+
       /*! output operator */
       friend std::ostream& operator<<(std::ostream& o, const UnalignedNode& n)
       {
@@ -1100,6 +1328,26 @@ namespace embree
         const Vec3fa vy(space0.l.vy.x[i],space0.l.vy.y[i],space0.l.vy.z[i]);
         const Vec3fa vz(space0.l.vz.x[i],space0.l.vz.y[i],space0.l.vz.z[i]);
         return rsqrt(vx*vx + vy*vy + vz*vz);
+      }
+
+      void* extractBVHChild(size_t i, const PrimitiveType *leafType, RTCBVHExtractFunction args, void *userData) const {
+        assert(i<N);
+        void *child = this->child(i).extractBVHTree(leafType, args, userData);
+        if(child == nullptr) return nullptr;
+
+        RTCAffineSpace affSpace = affineSpace3vfToRTC<N>(space0, i);
+
+        RTCBounds bounds;
+        bounds.lower_x = b1.lower.x[i];
+        bounds.lower_y = b1.lower.y[i];
+        bounds.lower_z = b1.lower.z[i];
+
+        bounds.upper_x = b1.upper.x[i];
+        bounds.upper_y = b1.upper.y[i];
+        bounds.upper_z = b1.upper.z[i];
+
+        args.setUnalignedLinearBounds(child, affSpace, bounds, userData);
+        return child;
       }
 
     public:
@@ -1461,6 +1709,15 @@ namespace embree
     /*! post build cleanup */
     void cleanup() {
       alloc.cleanup();
+    }
+
+    void* extractBVHTree(RTCBVHExtractFunction args, void *userData) {
+      if (root == emptyNode)
+        return nullptr;
+
+      void* node = root.extractBVHTree(this->primTy, args, userData);
+      args.setAlignedBounds(node, BBox3faToRTC(this->bounds.bounds()), userData);
+      return node;
     }
 
   public:
