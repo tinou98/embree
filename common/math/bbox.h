@@ -19,6 +19,8 @@
 #include "vec2.h"
 #include "vec3.h"
 
+#include "../include/embree3/rtcore_common.h"
+
 namespace embree
 {
   template<typename T>
@@ -315,5 +317,21 @@ namespace embree
     return BBox3fa(lower,upper);
   }
 #endif
+
+  inline RTCBounds BBox3faToRTC(const BBox3fa &bounds) {
+    RTCBounds bb;
+    bb.lower_x = bounds.lower.x;
+    bb.lower_y = bounds.lower.y;
+    bb.lower_z = bounds.lower.z;
+
+    bb.upper_x = bounds.upper.x;
+    bb.upper_y = bounds.upper.y;
+    bb.upper_z = bounds.upper.z;
+
+    bb.align0 = 0;
+    bb.align1 = 1;
+
+    return bb;
+  }
 }
 

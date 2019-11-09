@@ -286,4 +286,27 @@ namespace embree
     const float upper = (range.upper-time_range.lower)/time_range.size();
     return getTimeSegmentRange(BBox1f(lower,upper),numTimeSegments);
   }
+
+  template <unsigned int N>
+  __forceinline RTCAffineSpace affineSpace3vfToRTC(const AffineSpace3vf<N> affSpaces, unsigned int i)
+  {
+    RTCAffineSpace affSpace;
+
+    affSpace.affine[0] = affSpaces.p.x[i];
+    affSpace.affine[1] = affSpaces.p.y[i];
+    affSpace.affine[2] = affSpaces.p.z[i];
+
+    affSpace.linear[0] = affSpaces.l.vx.x[i];
+    affSpace.linear[1] = affSpaces.l.vx.y[i];
+    affSpace.linear[2] = affSpaces.l.vx.z[i];
+    affSpace.linear[3] = affSpaces.l.vy.x[i];
+    affSpace.linear[4] = affSpaces.l.vy.y[i];
+    affSpace.linear[5] = affSpaces.l.vy.z[i];
+    affSpace.linear[6] = affSpaces.l.vz.x[i];
+    affSpace.linear[7] = affSpaces.l.vz.y[i];
+    affSpace.linear[8] = affSpaces.l.vz.z[i];
+
+    return affSpace;
+  }
+
 }

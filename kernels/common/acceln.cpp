@@ -239,5 +239,30 @@ namespace embree
       accels[i]->clear();
     }
   }
+
+  void* AccelN::extractBVHTree(RTCBVHExtractFunction args, void *userData)
+  {
+    std::vector<void *> rootNodes(this->accels.size());
+
+    std::transform(this->accels.begin(), this->accels.end(),
+                   rootNodes.begin(), [args, userData](Accel *acc) {
+      return acc->extractBVHTree(args, userData);
+    });
+
+    switch (rootNodes.size()) {
+    case 0:
+      return nullptr;
+    case 1:
+      return rootNodes.front();
+    default:
+      RTCBounds bounds = BBox3faToRTC(this->getBounds());
+
+      void *root = args.createInnerNode(rootNodes.size(),
+                                        rootNodes.data(),
+                                        userData);
+      args.setAlignedBounds(root, bounds, userData);
+      return root;
+    }
+  }
 }
 
