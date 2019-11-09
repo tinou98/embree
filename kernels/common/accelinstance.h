@@ -41,7 +41,7 @@ namespace embree
       if (accel  ) accel->deleteGeometry(geomID);
       if (builder) builder->deleteGeometry(geomID);
     }
-
+    
     void clear() {
       if (accel) accel->clear();
       if (builder) builder->clear();
