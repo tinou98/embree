@@ -25,13 +25,10 @@
 #include "../builders/bvh_builder_sah.h"
 #include "../builders/bvh_builder_morton.h"
 
-
-
-
 #include "../bvh/bvh.h"
 
 namespace embree
-{
+{ 
   namespace isa // FIXME: support more ISAs for builders
   {
     struct BVH : public RefCount
