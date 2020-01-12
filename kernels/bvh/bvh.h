@@ -409,7 +409,7 @@ namespace embree
             InstancePrimitive *prims = reinterpret_cast<InstancePrimitive *>(leaf(nb));
             unsigned int *geomIDs = (unsigned int *)alloca(sizeof(unsigned int)*nb);
             for(int i = 0; i < nb; ++i)
-                geomIDs[i] = prims[i].instance->geomID;
+                geomIDs[i] = prims[i].instID_;
 
             return args.createInstance(nb, geomIDs, userData);
         } else if(leafType == &Curve8i::type) {

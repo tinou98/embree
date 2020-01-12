@@ -19,7 +19,7 @@
 #include "vec2.h"
 #include "vec3.h"
 
-#include "../include/embree3/rtcore_common.h"
+#include "../../include/embree3/rtcore_common.h"
 
 namespace embree
 {
