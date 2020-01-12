@@ -148,20 +148,20 @@ struct RTCBVHExtractFunction
   void (*expectedSize) (unsigned int num_leaf, unsigned int num_tri, void *userData);
 
   // Leaf creator function
-  void* (*createLeaf) (unsigned int nbPrim, const BVHPrimitive prims[], void *userData);
+  void* (*createLeaf) (unsigned int nbPrim, const struct BVHPrimitive prims[], void *userData);
   void* (*createInstance) (unsigned int nbPrim, const unsigned int geomID[], void *userData);
-  void* (*createCurve) (unsigned int nbPrim, const BVHPrimitive prims[], void *userData);
+  void* (*createCurve) (unsigned int nbPrim, const struct BVHPrimitive prims[], void *userData);
 
   // InnerNode creator function
   void* (*createInnerNode) (unsigned int nbChild, void* children[], void *userData);
 
-  void (*setAlignedBounds) (void *node, const RTCBounds &bounds, void *userData);
-  void (*setLinearBounds) (void *node, const RTCLinearBounds &lbounds, void *userData);
-  void (*setUnalignedBounds) (void *node, const RTCAffineSpace &affSpace, void *userData);
-  void (*setUnalignedLinearBounds) (void *node, const RTCAffineSpace &affSpace, const RTCBounds &bounds, void *userData);
+  void (*setAlignedBounds) (void *node, const struct RTCBounds bounds, void *userData);
+  void (*setLinearBounds) (void *node, const struct RTCLinearBounds lbounds, void *userData);
+  void (*setUnalignedBounds) (void *node, const struct RTCAffineSpace affSpace, void *userData);
+  void (*setUnalignedLinearBounds) (void *node, const struct RTCAffineSpace affSpace, const struct RTCBounds bounds, void *userData);
 };
 
-RTC_API void *rtcExtractBVH(RTCScene hscene, RTCBVHExtractFunction args, void *userData);
+RTC_API void *rtcExtractBVH(RTCScene hscene, struct RTCBVHExtractFunction args, void *userData);
 
 RTC_NAMESPACE_END
 

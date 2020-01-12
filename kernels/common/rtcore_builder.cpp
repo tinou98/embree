@@ -490,9 +490,9 @@ RTC_NAMESPACE_BEGIN
           SIZE(INC(num_prim, nbPrim))
         };
         param.createInnerNode = [](unsigned int, void*[], void* ) -> void* { return nullptr; };
-        param.setAlignedBounds = [](void*, const RTCBounds &, void*) {};
-        param.setLinearBounds = [](void*, const RTCLinearBounds &, void*) {};
-        param.setUnalignedBounds = [](void*, const RTCAffineSpace &, void*) {};
+        param.setAlignedBounds = [](void*, const RTCBounds, void*) {};
+        param.setLinearBounds = [](void*, const RTCLinearBounds, void*) {};
+        param.setUnalignedBounds = [](void*, const RTCAffineSpace, void*) {};
         param.expectedSize = nullptr;
 
         scene->extractBVHTree(param, &size);
